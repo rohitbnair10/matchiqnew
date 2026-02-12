@@ -1,112 +1,55 @@
-// MatchIQ Chat Proxy — Vercel Edge Function
-// Forwards chat requests to OpenAI, keeps API key server-side
-// Rate limited: 20 requests per IP per hour
+// MatchIQ Chat Proxy — Vercel Serverless Function
 
-const RATE_LIMIT = 20;          // requests per window
-const RATE_WINDOW = 60 * 60;    // 1 hour in seconds
-
-// In-memory rate limit store (resets on cold start — fine for moderate traffic)
-// For production scale, use Vercel KV or Upstash Redis
+const RATE_LIMIT = 20;
+const RATE_WINDOW = 60 * 60 * 1000;
 const rateLimitMap = new Map();
 
-function getRateLimitKey(req) {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-    || req.headers.get("x-real-ip")
-    || "unknown";
-}
-
-function checkRateLimit(key) {
+function checkRateLimit(ip) {
   const now = Date.now();
-  const record = rateLimitMap.get(key);
-
-  if (!record || now - record.windowStart > RATE_WINDOW * 1000) {
-    rateLimitMap.set(key, { windowStart: now, count: 1 });
-    return { allowed: true, remaining: RATE_LIMIT - 1 };
+  const record = rateLimitMap.get(ip);
+  if (!record || now - record.start > RATE_WINDOW) {
+    rateLimitMap.set(ip, { start: now, count: 1 });
+    return true;
   }
-
-  if (record.count >= RATE_LIMIT) {
-    const resetIn = Math.ceil((record.windowStart + RATE_WINDOW * 1000 - now) / 1000);
-    return { allowed: false, remaining: 0, resetIn };
-  }
-
+  if (record.count >= RATE_LIMIT) return false;
   record.count++;
-  return { allowed: true, remaining: RATE_LIMIT - record.count };
+  return true;
 }
 
-export default async function handler(req) {
-  // CORS — allow from Property Finder and Chrome extensions
-  const origin = req.headers.get("origin") || "";
-  const allowedOrigins = [
-    "https://www.propertyfinder.ae",
-    "chrome-extension://",
-  ];
-  const isAllowed = allowedOrigins.some(o => origin.startsWith(o));
-
-  const corsHeaders = {
-    "Access-Control-Allow-Origin": isAllowed ? origin : "https://www.propertyfinder.ae",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Max-Age": "86400",
-  };
+export default async function handler(req, res) {
+  // CORS headers on every response
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   // Handle preflight
   if (req.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: corsHeaders });
+    return res.status(204).end();
   }
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
-  // Rate limit check
-  const clientKey = getRateLimitKey(req);
-  const rateCheck = checkRateLimit(clientKey);
-
-  if (!rateCheck.allowed) {
-    return new Response(JSON.stringify({
-      error: `Rate limited. Try again in ${rateCheck.resetIn}s.`,
-      resetIn: rateCheck.resetIn,
-    }), {
-      status: 429,
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/json",
-        "Retry-After": String(rateCheck.resetIn),
-      },
-    });
+  // Rate limit
+  const ip = (req.headers["x-forwarded-for"] || "unknown").split(",")[0].trim();
+  if (!checkRateLimit(ip)) {
+    return res.status(429).json({ error: "Rate limited. Try again later." });
   }
 
-  // Parse request
-  let body;
-  try {
-    body = await req.json();
-  } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  // Validate
+  const { messages, max_tokens, temperature } = req.body || {};
+  if (!Array.isArray(messages)) {
+    return res.status(400).json({ error: "messages array required" });
   }
 
-  // Validate — only allow messages array
-  if (!Array.isArray(body.messages)) {
-    return new Response(JSON.stringify({ error: "messages array required" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  // Check API key
+  const OPENAI_KEY = process.env.OPENAI_API_KEY;
+  if (!OPENAI_KEY) {
+    return res.status(500).json({ error: "Server misconfigured" });
   }
 
   // Forward to OpenAI
-  const OPENAI_KEY = process.env.OPENAI_API_KEY;
-  if (!OPENAI_KEY) {
-    return new Response(JSON.stringify({ error: "Server misconfigured" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
   try {
     const openaiRes = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -115,41 +58,25 @@ export default async function handler(req) {
         "Authorization": `Bearer ${OPENAI_KEY}`,
       },
       body: JSON.stringify({
-        model: body.model || "gpt-4o-mini",   // default to mini to save costs
-        messages: body.messages,
-        max_tokens: body.max_tokens || 1500,
-        temperature: body.temperature ?? 0.85,
+        model: "gpt-4o-mini",
+        messages: messages,
+        max_tokens: max_tokens || 1500,
+        temperature: temperature ?? 0.85,
       }),
     });
 
     if (!openaiRes.ok) {
       const err = await openaiRes.json().catch(() => ({}));
-      return new Response(JSON.stringify({
-        error: err.error?.message || `OpenAI error: ${openaiRes.status}`,
-      }), {
-        status: openaiRes.status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      return res.status(openaiRes.status).json({
+        error: err.error?.message || "OpenAI error",
       });
     }
 
     const data = await openaiRes.json();
-
-    return new Response(JSON.stringify({
+    return res.status(200).json({
       content: data.choices[0].message.content,
-      remaining: rateCheck.remaining,
-    }), {
-      status: 200,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-
   } catch (e) {
-    return new Response(JSON.stringify({ error: "Failed to reach AI service" }), {
-      status: 502,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return res.status(502).json({ error: "Failed to reach AI service" });
   }
 }
-
-export const config = {
-  runtime: "edge",
-};
