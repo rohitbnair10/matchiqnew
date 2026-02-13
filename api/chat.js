@@ -1,6 +1,6 @@
 // MatchIQ Chat Proxy — Vercel Serverless Function
 
-const RATE_LIMIT = 20;
+const RATE_LIMIT = 100;
 const RATE_WINDOW = 60 * 60 * 1000;
 const rateLimitMap = new Map();
 
