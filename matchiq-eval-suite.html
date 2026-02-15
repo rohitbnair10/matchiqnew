@@ -88,7 +88,24 @@ const BR={"studio":"0","1br":"1","1":"1","1bhk":"1","1bed":"1","2br":"2","2":"2"
 function normBR(r){if(!r)return null;const s=String(r).toLowerCase().replace(/[\s\-_]+/g,"").replace(/bedrooms?/g,"bed");if(BR[s]!==undefined)return s;const m=s.match(/(\d)(br|bed|bhk|b)?/);if(m){const k=m[2]?m[1]+m[2]:m[1];if(BR[k]!==undefined)return k;if(BR[m[1]]!==undefined)return m[1];}return/studio/i.test(s)?"studio":null;}
 function buildURL(o={}){const{communityId:ci,bedrooms:bd,budgetMin:mn,budgetMax:mx,type:tp="rent"}=o;const c=C.find(x=>x.id===ci);if(!c)return null;const p=new URLSearchParams();p.set("l",c.pfLocId);p.set("c",tp==="buy"?"1":"2");p.set("t","1");if(bd){const k=normBR(bd);if(k&&BR[k]!==undefined)p.append("bdr[]",BR[k]);}if(mn)p.set("pf",mn);if(mx)p.set("pt",mx);p.set("rp","y");p.set("ob","nd");return`https://www.propertyfinder.ae/en/search?${p.toString()}`;}
 function parsePrefs(t){const m=t.match(/===USERPREFS===\s*\n([\s\S]*?)===END_USERPREFS===/);if(!m)return{};const b=m[1],p={};const bm=b.match(/bedrooms:\s*(.+)/i),bu=b.match(/budget_monthly:\s*(\d+)/i);if(bm&&bm[1].trim()!=="null")p.bedrooms=bm[1].trim();if(bu)p.budgetMonthly=parseInt(bu[1]);return p;}
-function parseRecs(t){const rx=/===RECOMMENDATION===\s*\n\s*name:\s*(.+?)\s*\n\s*id:\s*(.+?)\s*\n\s*score:\s*(\d+)\s*\n\s*===END===/g;const res=[];let m;while((m=rx.exec(t))!==null){const cid=m[2].trim().replace(/**/g,'').replace(/^[|]$/g,'').trim();const c=C.find(x=>x.id===cid)||C.find(x=>x.n.toLowerCase().includes(m[1].trim().toLowerCase()));if(c)res.push({...c,score:parseInt(m[3])});}if(!res.length){for(const c of C){if(new RegExp('\\b'+c.n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(t))res.push({...c,score:85-res.length*5});if(res.length>=3)break;}}return res;}
+function parseRecs(t) {
+  const rx = /===RECOMMENDATION===\s*\n\s*name:\s*(.+?)\s*\n\s*id:\s*(.+?)\s*\n\s*score:\s*(\d+)\s*\n\s*===END===/g;
+  const res = [];
+  let m;
+  while ((m = rx.exec(t)) !== null) {
+    const cid = m[2].trim().replace(/\*+/g, '').replace(/^\||\|$/g, '').trim();
+    const c = C.find(x => x.id === cid) || C.find(x => x.n.toLowerCase().includes(m[1].trim().toLowerCase()));
+    if (c) res.push({ ...c, score: parseInt(m[3]) });
+  }
+  if (!res.length) {
+    for (const c of C) {
+      if (new RegExp('\\b' + c.n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(t))
+        res.push({ ...c, score: 85 - res.length * 5 });
+      if (res.length >= 3) break;
+    }
+  }
+  return res;
+}
 function sysPrompt(){const ctx=C.map(c=>`**${c.n}** [id:${c.id}] (${c.tier}) Rent:${Object.entries(c.r).filter(([,v])=>v).map(([k,v])=>`${k}:${Math.round(v/12)}/mo`).join(",")} Commute:${Object.entries(c.cm).map(([k,v])=>`${k}:${v}m`).join(",")} Metro:${c.m?"Y":"N"} Pets:${c.p?"Y":"N"} Fam:${c.f}/10 Tags:${c.tags.join(",")}`).join("\n");return`You are MatchIQ. Help find Dubai neighborhoods.\n\nIf user gave enough info→recommend immediately. If missing→ask max 1-2 questions.\n\nMUST use this format for recs:\n\n===USERPREFS===\nbedrooms: 2br\nbudget_monthly: 7000\ntype: rent\nfurnished: null\n===END_USERPREFS===\n\n===RECOMMENDATION===\nname: Downtown Dubai\nid: downtown\nscore: 88\n===END===\n\n(repeat with 2 more recs - use EXACT community ids like dubai-marina, jvc, jlt - NO brackets)\n\nNEVER plain text recs. Kids→family≥7. Metro needed→only metro areas. DEFAULTS: Always assume RENT unless user says buy. Always assume unfurnished unless specified. NEVER ask rent-or-buy or furnished-or-unfurnished.\n\n${ctx}`;}
 
 const TESTS=[
