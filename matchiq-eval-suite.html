@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MatchIQ Eval Suite</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0a0f1a;color:#e2e8f0;padding:24px}
+h1{font-size:24px;margin-bottom:4px}
+.sub{color:#64748b;font-size:14px;margin-bottom:24px}
+.controls{display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;align-items:center}
+button{padding:10px 20px;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
+.btn-run{background:#0ea5e9;color:#fff}.btn-run:disabled{opacity:.5;cursor:not-allowed}
+.btn-stop{background:#ef4444;color:#fff;display:none}
+.btn-custom{background:#1e293b;color:#e2e8f0;border:1px solid #334155!important}
+select{padding:10px 14px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;font-family:inherit}
+.stats{display:flex;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.stat{padding:12px 20px;background:#1e293b;border-radius:10px;text-align:center;min-width:100px}
+.stat-num{font-size:28px;font-weight:700}.stat-label{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px}
+.s-pass .stat-num{color:#22c55e}.s-flaky .stat-num{color:#f59e0b}.s-fail .stat-num{color:#ef4444}.s-info .stat-num{color:#0ea5e9}
+.pbar-wrap{margin-bottom:16px}.pbar{height:4px;background:#1e293b;border-radius:2px;overflow:hidden}
+.pbar-fill{height:100%;background:#0ea5e9;transition:width .3s;width:0%}
+.plabel{font-size:12px;color:#64748b;margin-bottom:6px;min-height:16px}
+.grid{display:flex;flex-direction:column;gap:12px}
+.card{background:#1e293b;border-radius:12px;border:1px solid #334155;overflow:hidden;transition:border-color .3s}
+.card.pass{border-color:#22c55e40}.card.fail{border-color:#ef444440}.card.flaky{border-color:#f59e0b40}.card.running{border-color:#0ea5e940}
+.card-hdr{padding:14px 18px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none}
+.card-hdr:hover{background:#334155}
+.card-name{font-weight:600;font-size:14px}.card-input{font-size:12px;color:#64748b;margin-top:2px}
+.badges{display:flex;gap:8px;align-items:center}
+.status{padding:4px 12px;border-radius:6px;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.status.pass{background:#22c55e20;color:#22c55e}.status.fail{background:#ef444420;color:#ef4444}
+.status.flaky{background:#f59e0b20;color:#f59e0b}.status.running{background:#0ea5e920;color:#0ea5e9}
+.status.pending{background:#33415530;color:#64748b}
+.rate{font-size:13px;font-weight:700;padding:4px 10px;border-radius:6px;background:#0f172a}
+.rate.hi{color:#22c55e}.rate.mid{color:#f59e0b}.rate.lo{color:#ef4444}
+.details{display:none;padding:0 18px 14px;font-size:13px;line-height:1.6}
+.card.expanded .details{display:block}
+.tabs{display:flex;gap:8px;margin-bottom:12px}
+.tab{padding:6px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;background:#0f172a;border:1px solid #334155;color:#94a3b8}
+.tab.active{border-color:#0ea5e9;color:#0ea5e9}.tab.tp{border-color:#22c55e40}.tab.tf{border-color:#ef444440}
+.ck-row{display:flex;align-items:flex-start;gap:8px;margin-bottom:4px}
+.ck-icon{flex-shrink:0;font-size:14px;margin-top:1px}
+.ck-p{color:#22c55e}.ck-f{color:#ef4444}
+.meta{display:flex;gap:16px;margin-bottom:10px;font-size:12px;color:#64748b;flex-wrap:wrap}
+.meta span{display:flex;align-items:center;gap:4px}
+.raw{margin-top:8px;padding:12px;background:#0a0f1a;border-radius:8px;font-family:'SF Mono',monospace;font-size:11px;color:#94a3b8;max-height:250px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+.url-p{margin-top:4px;padding:6px 10px;background:#0a0f1a;border-radius:6px;font-family:monospace;font-size:11px;color:#0ea5e9;word-break:break-all}
+.custom-row{display:flex;gap:12px;margin-top:24px}
+.custom-input{flex:1;padding:10px 14px;background:#1e293b;border:1px solid #334155;border-radius:8px;color:#e2e8f0;font-size:14px;font-family:inherit}
+.custom-input::placeholder{color:#475569}
+.summary{margin-top:24px;padding:16px 20px;background:#1e293b;border-radius:12px;border:1px solid #334155;display:none}
+.summary.show{display:block}
+.summary-title{font-weight:700;font-size:16px;margin-bottom:8px}
+.srow{display:flex;justify-content:space-between;padding:4px 0;font-size:13px}
+.srow .sl{color:#94a3b8}
+</style>
+</head>
+<body>
+<h1>MatchIQ Eval Suite</h1>
+<p class="sub">Each test runs multiple times to measure consistency. Click any test to expand details.</p>
+<div class="controls">
+<button class="btn-run" id="runAll" onclick="runAll()">▶ Run All Evals</button>
+<button class="btn-stop" id="stopBtn" onclick="stop()">■ Stop</button>
+<select id="numRuns"><option value="1">1 run (fast)</option><option value="3" selected>3 runs (recommended)</option><option value="5">5 runs (thorough)</option></select>
+</div>
+<div class="plabel" id="plabel"></div>
+<div class="pbar-wrap"><div class="pbar"><div class="pbar-fill" id="pbar"></div></div></div>
+<div class="stats">
+<div class="stat s-pass"><div class="stat-num" id="sPass">0</div><div class="stat-label">Solid (100%)</div></div>
+<div class="stat s-flaky"><div class="stat-num" id="sFlaky">0</div><div class="stat-label">Flaky</div></div>
+<div class="stat s-fail"><div class="stat-num" id="sFail">0</div><div class="stat-label">Failing</div></div>
+<div class="stat s-info"><div class="stat-num" id="sLat">—</div><div class="stat-label">Avg Latency</div></div>
+<div class="stat"><div class="stat-num" id="sCost">—</div><div class="stat-label">Est. Cost</div></div>
+</div>
+<div class="grid" id="grid"></div>
+<div class="custom-row">
+<input class="custom-input" id="customIn" placeholder="Custom prompt to test..." onkeydown="if(event.key==='Enter')runCustom()"/>
+<button class="btn-custom" onclick="runCustom()">Test</button>
+</div>
+<div class="summary" id="summ"><div class="summary-title">📊 Eval Summary</div><div id="summContent"></div></div>
+
+<script>
+const API="https://matchiqnew.vercel.app/api/chat";
+const C=[{id:"dubai-marina",n:"Dubai Marina",pfLocId:"50",r:{studio:65000,"1br":95000,"2br":145000},cm:{DIFC:20,"Media City":5},m:!0,p:!0,tags:["waterfront"],best:["young-professionals"],tier:"premium",f:3,w:9,nl:9,q:2,cc:9,b:8,bf:3},{id:"jbr",n:"JBR",pfLocId:"67",r:{studio:70000,"1br":105000,"2br":160000},cm:{DIFC:25,"Media City":8},m:!0,p:!0,tags:["beachfront"],best:["beach-lovers"],tier:"premium",f:6,w:8,nl:7,q:3,cc:8,b:10,bf:2},{id:"downtown",n:"Downtown Dubai",pfLocId:"41",r:{studio:75000,"1br":110000,"2br":175000},cm:{DIFC:5,"Media City":20},m:!0,p:!0,tags:["luxury"],best:["professionals"],tier:"ultra-premium",f:5,w:8,nl:7,q:3,cc:9,b:3,bf:1},{id:"business-bay",n:"Business Bay",pfLocId:"36",r:{studio:55000,"1br":80000,"2br":130000},cm:{DIFC:8,"Media City":20},m:!0,p:!0,tags:["urban"],best:["young-professionals"],tier:"mid-premium",f:4,w:6,nl:6,q:3,cc:7,b:3,bf:4},{id:"jvc",n:"JVC",pfLocId:"73",r:{studio:35000,"1br":55000,"2br":80000},cm:{DIFC:25,"Media City":15},m:!1,p:!0,tags:["budget-friendly"],best:["families"],tier:"affordable",f:8,w:4,nl:2,q:7,cc:4,b:2,bf:9},{id:"jlt",n:"JLT",pfLocId:"71",r:{studio:45000,"1br":70000,"2br":100000},cm:{DIFC:22,"Media City":5},m:!0,p:!0,tags:["lakeside"],best:["young-professionals"],tier:"mid-range",f:5,w:7,nl:5,q:5,cc:7,b:5,bf:7},{id:"dubai-hills",n:"Dubai Hills Estate",pfLocId:"1323",r:{studio:45000,"1br":70000,"2br":110000},cm:{DIFC:18,"Media City":20},m:!1,p:!0,tags:["family"],best:["families"],tier:"mid-premium",f:10,w:5,nl:2,q:8,cc:5,b:2,bf:5},{id:"dso",n:"Dubai Silicon Oasis",pfLocId:"46",r:{studio:25000,"1br":38000,"2br":55000},cm:{DIFC:30,"Media City":35},m:!1,p:!0,tags:["affordable"],best:["budget-conscious"],tier:"affordable",f:7,w:3,nl:1,q:8,cc:3,b:1,bf:10},{id:"discovery-gardens",n:"Discovery Gardens",pfLocId:"42",r:{studio:25000,"1br":35000,"2br":50000},cm:{DIFC:30,"Media City":10},m:!0,p:!1,tags:["metro"],best:["budget-conscious"],tier:"budget",f:6,w:4,nl:1,q:7,cc:3,b:2,bf:10},{id:"town-square",n:"Town Square",pfLocId:"131",r:{studio:25000,"1br":35000,"2br":55000},cm:{DIFC:30,"Media City":30},m:!1,p:!0,tags:["family"],best:["families"],tier:"affordable",f:9,w:4,nl:1,q:9,cc:3,b:1,bf:9},{id:"al-quoz",n:"Al Quoz",pfLocId:"30",r:{studio:30000,"1br":45000,"2br":65000},cm:{DIFC:15,"Media City":10},m:!1,p:!0,tags:["artsy"],best:["creatives"],tier:"affordable",f:4,w:4,nl:4,q:6,cc:5,b:2,bf:8},{id:"city-walk",n:"City Walk",pfLocId:"9529",r:{studio:70000,"1br":110000,"2br":170000},cm:{DIFC:10,"Media City":20},m:!1,p:!0,tags:["walkable"],best:["design-lovers"],tier:"premium",f:5,w:10,nl:6,q:5,cc:10,b:5,bf:2},{id:"difc",n:"DIFC",pfLocId:"39",r:{studio:70000,"1br":110000,"2br":180000},cm:{DIFC:0,"Media City":20},m:!0,p:!1,tags:["corporate"],best:["finance-professionals"],tier:"ultra-premium",f:3,w:8,nl:7,q:4,cc:8,b:2,bf:1}];
+const BR={"studio":"0","1br":"1","1":"1","1bhk":"1","1bed":"1","2br":"2","2":"2","2bhk":"2","2bed":"2","3br":"3","3":"3","3bhk":"3","3bed":"3","4br":"4","4":"4"};
+function normBR(r){if(!r)return null;const s=String(r).toLowerCase().replace(/[\s\-_]+/g,"").replace(/bedrooms?/g,"bed");if(BR[s]!==undefined)return s;const m=s.match(/(\d)(br|bed|bhk|b)?/);if(m){const k=m[2]?m[1]+m[2]:m[1];if(BR[k]!==undefined)return k;if(BR[m[1]]!==undefined)return m[1];}return/studio/i.test(s)?"studio":null;}
+function buildURL(o={}){const{communityId:ci,bedrooms:bd,budgetMin:mn,budgetMax:mx,type:tp="rent"}=o;const c=C.find(x=>x.id===ci);if(!c)return null;const p=new URLSearchParams();p.set("l",c.pfLocId);p.set("c",tp==="buy"?"1":"2");p.set("t","1");if(bd){const k=normBR(bd);if(k&&BR[k]!==undefined)p.append("bdr[]",BR[k]);}if(mn)p.set("pf",mn);if(mx)p.set("pt",mx);p.set("rp","y");p.set("ob","nd");return`https://www.propertyfinder.ae/en/search?${p.toString()}`;}
+function parsePrefs(t){const m=t.match(/===USERPREFS===\s*\n([\s\S]*?)===END_USERPREFS===/);if(!m)return{};const b=m[1],p={};const bm=b.match(/bedrooms:\s*(.+)/i),bu=b.match(/budget_monthly:\s*(\d+)/i);if(bm&&bm[1].trim()!=="null")p.bedrooms=bm[1].trim();if(bu)p.budgetMonthly=parseInt(bu[1]);return p;}
+function parseRecs(t){const rx=/===RECOMMENDATION===\s*\n\s*name:\s*(.+?)\s*\n\s*id:\s*(.+?)\s*\n\s*score:\s*(\d+)\s*\n\s*===END===/g;const res=[];let m;while((m=rx.exec(t))!==null){const c=C.find(x=>x.id===m[2].trim())||C.find(x=>x.n.toLowerCase().includes(m[1].trim().toLowerCase()));if(c)res.push({...c,score:parseInt(m[3])});}if(!res.length){for(const c of C){if(new RegExp('\\b'+c.n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(t))res.push({...c,score:85-res.length*5});if(res.length>=3)break;}}return res;}
+function sysPrompt(){const ctx=C.map(c=>`**${c.n}** [id:${c.id}] (${c.tier}) Rent:${Object.entries(c.r).filter(([,v])=>v).map(([k,v])=>`${k}:${Math.round(v/12)}/mo`).join(",")} Commute:${Object.entries(c.cm).map(([k,v])=>`${k}:${v}m`).join(",")} Metro:${c.m?"Y":"N"} Pets:${c.p?"Y":"N"} Fam:${c.f}/10 Tags:${c.tags.join(",")}`).join("\n");return`You are MatchIQ. Help find Dubai neighborhoods.\n\nIf user gave enough info→recommend immediately. If missing→ask max 1-2 questions.\n\nMUST use this format for recs:\n===USERPREFS===\nbedrooms: [studio/1br/2br/3br or null]\nbudget_monthly: [number or null]\ntype: [rent/buy]\nfurnished: [true/false/null]\n===END_USERPREFS===\n\n===RECOMMENDATION===\nname: [Name]\nid: [id]\nscore: [0-100]\n===END===\n(3 times)\n\nNEVER plain text recs. Kids→family≥7. Metro needed→only metro areas.\n\n${ctx}`;}
+
+const TESTS=[
+{name:"Full info → Immediate recs",input:"2BHK, 7k budget, work near DIFC, love cafes and walkable areas",checks:[
+{name:"Has USERPREFS",fn:r=>/===USERPREFS===/.test(r)},
+{name:"3 RECOMMENDATION blocks",fn:r=>(r.match(/===RECOMMENDATION===/g)||[]).length===3},
+{name:"Bedrooms=2",fn:r=>{const p=parsePrefs(r);return p.bedrooms&&/2/i.test(p.bedrooms)}},
+{name:"Budget=7000",fn:r=>parsePrefs(r).budgetMonthly===7000},
+{name:"URL has bdr[]=2",fn:r=>{const rc=parseRecs(r),p=parsePrefs(r);if(!rc.length||!p.bedrooms)return!1;return(buildURL({communityId:rc[0].id,bedrooms:p.bedrooms})||"").includes("bdr%5B%5D=2")}},
+{name:"No interview Qs",fn:r=>!/what.*budget|how many bed|where.*work\?/i.test(r.replace(/===[\s\S]*?===/g,""))},
+]},
+{name:"1BHK + Media City",input:"1BHK, 5k/month, working in Media City",checks:[
+{name:"Has recs",fn:r=>/===RECOMMENDATION===/.test(r)},
+{name:"Bedrooms=1",fn:r=>{const p=parsePrefs(r);return p.bedrooms&&/1/i.test(p.bedrooms)}},
+{name:"Budget=5000",fn:r=>parsePrefs(r).budgetMonthly===5000},
+{name:"URL has bdr[]=1",fn:r=>{const rc=parseRecs(r);return rc.length>0&&(buildURL({communityId:rc[0].id,bedrooms:"1br"})||"").includes("bdr%5B%5D=1")}},
+]},
+{name:"Studio + Metro",input:"Studio, 3k/month max, must be near metro, single and new to Dubai",checks:[
+{name:"Has recs",fn:r=>/===RECOMMENDATION===/.test(r)},
+{name:"Bedrooms=studio",fn:r=>/studio/i.test(parsePrefs(r).bedrooms||"")},
+{name:"Budget=3000",fn:r=>parsePrefs(r).budgetMonthly===3000},
+{name:"All recs have metro",fn:r=>{const rc=parseRecs(r);return rc.length>0&&rc.every(x=>x.m)}},
+{name:"URL has bdr[]=0",fn:r=>{const rc=parseRecs(r);return rc.length>0&&(buildURL({communityId:rc[0].id,bedrooms:"studio"})||"").includes("bdr%5B%5D=0")}},
+]},
+{name:"Vague → Ask questions",input:"Looking for a chill area",checks:[
+{name:"No recs (too vague)",fn:r=>!/===RECOMMENDATION===/.test(r)},
+{name:"Asks about budget/beds",fn:r=>/budget|rent|bed|bhk|spend|afford|price/i.test(r)},
+]},
+{name:"Family + kids",input:"3BHK for family, 2 kids, budget 10k, work Downtown, need schools and parks",checks:[
+{name:"Has recs",fn:r=>/===RECOMMENDATION===/.test(r)},
+{name:"Bedrooms=3",fn:r=>/3/i.test(parsePrefs(r).bedrooms||"")},
+{name:"Budget=10000",fn:r=>parsePrefs(r).budgetMonthly===10000},
+{name:"Family-friendly recs (f≥7)",fn:r=>{const rc=parseRecs(r);return rc.length>0&&rc.some(x=>x.f>=7)}},
+]},
+{name:"Budget-conscious",input:"Cheapest 1BR possible, work remotely, commute doesn't matter",checks:[
+{name:"Has recs",fn:r=>/===RECOMMENDATION===/.test(r)},
+{name:"Affordable/budget tier",fn:r=>{const rc=parseRecs(r);return rc.length>0&&rc.some(x=>x.tier==="affordable"||x.tier==="budget")}},
+]},
+{name:"Off-topic → Redirect",input:"What's the best restaurant in London?",checks:[
+{name:"No recs",fn:r=>!/===RECOMMENDATION===/.test(r)},
+{name:"Redirects to Dubai",fn:r=>/dubai|neighborhood|apartment|help.*find/i.test(r)},
+]},
+{name:"Budget URL math",input:"2BR, 8000 AED/month, DIFC area, pet-friendly",checks:[
+{name:"Has recs",fn:r=>/===RECOMMENDATION===/.test(r)},
+{name:"Budget=8000",fn:r=>parsePrefs(r).budgetMonthly===8000},
+{name:"URL budget ±20%",fn:r=>{const rc=parseRecs(r),p=parsePrefs(r);if(!rc.length||!p.budgetMonthly)return!1;const a=p.budgetMonthly*12;return(buildURL({communityId:rc[0].id,bedrooms:p.bedrooms,budgetMin:Math.round(a*.8),budgetMax:Math.round(a*1.2)})||"").includes(`pf=${Math.round(a*.8)}`)}},
+{name:"Pet-friendly recs",fn:r=>{const rc=parseRecs(r);return rc.length>0&&rc.some(x=>x.p)}},
+]},
+];
+
+let running=!1,stopped=!1,lats=[];
+
+async function callAPI(msg){
+const t0=performance.now();
+const res=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:[{role:"system",content:sysPrompt()},{role:"assistant",content:"Hey! Welcome to MatchIQ. Describe the kind of neighborhood you want to live in."},{role:"user",content:msg}],max_tokens:2500,temperature:.85})});
+const lat=Math.round(performance.now()-t0);
+const d=await res.json();
+if(!res.ok)throw new Error(d.error||`API ${res.status}`);
+return{content:d.content,latency:lat};
+}
+
+const esc=s=>s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+function render(){
+const g=document.getElementById("grid");
+g.innerHTML=TESTS.map((t,i)=>{
+const rc=t.passRate===undefined?"":t.passRate===100?"hi":t.passRate>0?"mid":"lo";
+const sc=t.status||"pending";
+return`<div class="card ${sc}" id="t${i}" onclick="tog(${i})"><div class="card-hdr"><div><div class="card-name">${t.name}</div><div class="card-input">"${t.input.substring(0,65)}${t.input.length>65?"...":""}"</div></div><div class="badges">${t.passRate!==undefined?`<span class="rate ${rc}">${t.passRate}%</span>`:""}<div class="status ${sc}">${t.statusText||"Pending"}</div></div></div><div class="details" id="d${i}">${t.runs&&t.runs.length?`<div class="tabs">${t.runs.map((r,ri)=>`<div class="tab ${ri===0?"active":""} ${r.ok?"tp":"tf"}" onclick="event.stopPropagation();showR(${i},${ri})">Run ${ri+1} ${r.ok?"✓":"✗"} <span style="color:#64748b;font-size:11px">${r.lat}ms</span></div>`).join("")}</div><div id="rc${i}">${runHTML(t.runs[0],t)}</div>`:""}</div></div>`;
+}).join("");
+updStats();
+}
+
+function runHTML(run,t){
+if(!run)return"";
+const recs=parseRecs(run.res),p=parsePrefs(run.res);
+const urls=recs.map(r=>buildURL({communityId:r.id,bedrooms:p.bedrooms,budgetMin:p.budgetMonthly?Math.round(p.budgetMonthly*12*.8):null,budgetMax:p.budgetMonthly?Math.round(p.budgetMonthly*12*1.2):null})||"No URL");
+return`<div class="meta"><span>⏱ ${run.lat}ms</span><span>📦 ${run.res.length}ch</span><span>🏘 ${recs.length} recs</span>${p.bedrooms?`<span>🛏 ${p.bedrooms}</span>`:""}${p.budgetMonthly?`<span>💰 ${p.budgetMonthly}/mo</span>`:""}</div><div>${run.cks.map((c,ci)=>`<div class="ck-row"><span class="ck-icon ${c?"ck-p":"ck-f"}">${c?"✓":"✗"}</span><span>${t.checks[ci].name}</span></div>`).join("")}</div>${urls.length?urls.map(u=>`<div class="url-p">${esc(u)}</div>`).join(""):""}<div class="raw">${esc(run.res)}</div>`;
+}
+
+function showR(ti,ri){document.getElementById(`rc${ti}`).innerHTML=runHTML(TESTS[ti].runs[ri],TESTS[ti]);document.querySelectorAll(`#t${ti} .tab`).forEach((t,i)=>t.classList.toggle("active",i===ri));}
+function tog(i){document.getElementById(`t${i}`).classList.toggle("expanded");}
+
+function updStats(){
+let p=0,fl=0,fa=0;
+TESTS.forEach(t=>{if(t.passRate===100)p++;else if(t.passRate>0)fl++;else if(t.passRate===0)fa++;});
+document.getElementById("sPass").textContent=p;
+document.getElementById("sFlaky").textContent=fl;
+document.getElementById("sFail").textContent=fa;
+if(lats.length){document.getElementById("sLat").textContent=(lats.reduce((a,b)=>a+b,0)/lats.length/1000).toFixed(1)+"s";}
+const cost=lats.length*(500*.00000015+800*.0000006);
+document.getElementById("sCost").textContent=lats.length?`$${cost.toFixed(4)}`:"—";
+}
+
+async function runTest(i,n){
+const t=TESTS[i];t.runs=[];t.status="running";t.statusText=`0/${n}`;render();
+for(let r=0;r<n;r++){
+if(stopped)break;
+t.statusText=`${r+1}/${n}`;render();
+try{
+const{content,latency}=await callAPI(t.input);
+lats.push(latency);
+const cks=t.checks.map(c=>{try{return!!c.fn(content)}catch(e){return!1}});
+t.runs.push({res:content,lat:latency,cks,ok:cks.every(Boolean)});
+}catch(e){t.runs.push({res:`ERROR: ${e.message}`,lat:0,cks:t.checks.map(()=>!1),ok:!1});}
+if(r<n-1)await new Promise(r=>setTimeout(r,2500));
+}
+const wins=t.runs.filter(r=>r.ok).length;
+t.passRate=Math.round(wins/t.runs.length*100);
+t.status=t.passRate===100?"pass":t.passRate>0?"flaky":"fail";
+t.statusText=t.passRate===100?"Solid":t.passRate>0?"Flaky":"Failing";
+render();
+}
+
+async function runAll(){
+running=!0;stopped=!1;lats=[];
+document.getElementById("runAll").disabled=!0;
+document.getElementById("stopBtn").style.display="";
+document.getElementById("summ").classList.remove("show");
+const n=parseInt(document.getElementById("numRuns").value);
+TESTS.forEach(t=>{t.status="";t.statusText="";t.runs=[];t.passRate=undefined;});render();
+for(let i=0;i<TESTS.length;i++){
+if(stopped)break;
+document.getElementById("plabel").textContent=`Running "${TESTS[i].name}" (${i+1}/${TESTS.length})...`;
+document.getElementById("pbar").style.width=`${(i+1)/TESTS.length*100}%`;
+await runTest(i,n);
+if(i<TESTS.length-1&&!stopped)await new Promise(r=>setTimeout(r,1500));
+}
+document.getElementById("plabel").textContent=stopped?"Stopped.":"Done!";
+running=!1;document.getElementById("runAll").disabled=!1;document.getElementById("stopBtn").style.display="none";
+showSummary();
+}
+
+function stop(){stopped=!0;}
+
+function showSummary(){
+const s=document.getElementById("summ"),c=document.getElementById("summContent");
+s.classList.add("show");
+const done=TESTS.filter(t=>t.passRate!==undefined);
+const avg=done.length?Math.round(done.reduce((a,t)=>a+t.passRate,0)/done.length):0;
+c.innerHTML=`<div class="srow" style="font-weight:700;padding-bottom:8px;border-bottom:1px solid #334155;margin-bottom:8px"><span>Overall</span><span style="color:${avg>=80?"#22c55e":avg>=50?"#f59e0b":"#ef4444"}">${avg}%</span></div>`+
+done.map(t=>`<div class="srow"><span class="sl">${t.passRate===100?"✅":t.passRate>0?"⚠️":"❌"} ${t.name}</span><span style="font-weight:700;color:${t.passRate===100?"#22c55e":t.passRate>0?"#f59e0b":"#ef4444"}">${t.passRate}%</span></div>`).join("")+
+`<div class="srow" style="margin-top:8px;border-top:1px solid #334155;padding-top:8px"><span class="sl">Total calls</span><span>${lats.length}</span></div>`;
+}
+
+async function runCustom(){
+const v=document.getElementById("customIn").value.trim();if(!v)return;
+const n=parseInt(document.getElementById("numRuns").value);
+TESTS.push({name:`Custom: "${v.substring(0,25)}..."`,input:v,checks:[
+{name:"Has USERPREFS",fn:r=>/===USERPREFS===/.test(r)},
+{name:"Has recs",fn:r=>(r.match(/===RECOMMENDATION===/g)||[]).length>=1},
+{name:"Parsed bedrooms",fn:r=>!!parsePrefs(r).bedrooms},
+{name:"Parsed budget",fn:r=>!!parsePrefs(r).budgetMonthly},
+{name:"Valid communities",fn:r=>parseRecs(r).length>0},
+]});
+render();await runTest(TESTS.length-1,n);document.getElementById("customIn").value="";
+}
+
+render();
+</script>
+</body>
+</html>
